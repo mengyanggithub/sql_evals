@@ -62,7 +62,7 @@ You can easily reproduce our evaluation results as follows:
    pip3 install vllm func_timeout tqdm matplotlib nltk==3.8.1 sqlparse pandas
    ```
 
-2. **Run Evaluation:**
+2. **Run Generation and Evaluation:**
 Here is an example of evaluation a model, please replace the input paraments
    ```bash
    python3 eval_open_source_models.py \
@@ -72,4 +72,15 @@ Here is an example of evaluation a model, please replace the input paraments
    --dp_path /BIRD_DIR/dev_20240627/dev_databases \
    --self_consistency
    ```
+
+
+
+3. **Only Evaluate Generation Results:**
+   ```bash
+   python3 ./bird_eval/evaluate_bird.py \
+   --pred results/model_0720/major_voting_base.json \
+   --gold /BIRD_DIR/dev_20240627/dev.json \
+   --db_path /BIRD_DIR/dev_20240627/dev_databases \
+   --mode major_voting
+
 
