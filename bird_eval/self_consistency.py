@@ -34,78 +34,82 @@ def efficient_soft_df_similarity(df1: pd.DataFrame, df2: pd.DataFrame) -> float:
     Returns:
         float: Similarity score in [0, 1].
     """
-    # If either DataFrame is empty in rows or columns, similarity = 0
-    if df1 is None or df2 is None or len(df1) == 0 or len(df2) == 0:
+    try:
+        # If either DataFrame is empty in rows or columns, similarity = 0
+        if df1 is None or df2 is None or len(df1) == 0 or len(df2) == 0:
+            return 0.0
+
+        df1 = df1.copy()  # Precaution
+        df2 = df2.copy()
+
+        def _ensure_hashable_values(value: Any) -> Hashable:
+            if isinstance(value, Hashable):
+                return value
+            return repr(value)
+
+        # Use applymap for DataFrames
+        df1 = df1.applymap(_ensure_hashable_values)
+        df2 = df2.applymap(_ensure_hashable_values)
+
+        # For rare cases where df has two columns with the same name (sic!)
+        def _select_1d(df, col):
+            c = df[col]
+            if len(c.shape) == 2:
+                return pd.DataFrame(c.stack().values)
+            return c
+
+        # Precompute value_counts for each column
+        df1_counts = {col: _select_1d(df1, col).value_counts(dropna=False) for col in df1.columns}
+        df2_counts = {col: _select_1d(df2, col).value_counts(dropna=False) for col in df2.columns}
+
+        total_real_agreement = 0.0
+        total_possible_agreement = 0.0
+
+        # Union of all columns
+        all_columns = df1.columns.union(df2.columns)
+
+        for col in all_columns:
+            vc1 = df1_counts.get(col)
+            vc2 = df2_counts.get(col)
+
+            if vc1 is None or vc1.empty:
+                total_possible_agreement += 0 if vc2 is None else vc2.to_numpy().sum()
+                continue
+
+            if vc2 is None or vc2.empty:
+                total_possible_agreement += 0 if vc1 is None else vc1.to_numpy().sum()
+                continue
+
+            # 1) Get union of distinct values in that column
+            union_idx = pd.Index(pd.concat([vc1.index.to_frame(), vc2.index.to_frame()], axis=0).iloc[:, 0].unique())
+            if union_idx.dtype != "object":
+                union_idx = union_idx.astype(object)
+
+            # 2) Reindex both frequency series to that union, fill missing with 0
+            freq1 = vc1.reindex(union_idx, fill_value=0).values
+            freq2 = vc2.reindex(union_idx, fill_value=0).values
+
+            if np.nan in union_idx:
+                freq1[union_idx.isnull()] += freq2[union_idx.isnull()]
+                freq2[union_idx.isnull()] = 0
+
+            # 3) Vectorized computations (avoiding DataFrame overhead)
+            possible_agreement = np.maximum(freq1, freq2).sum()
+            accumulated_difference = np.abs(freq1 - freq2).sum()
+            real_agreement = possible_agreement - accumulated_difference
+
+            # Accumulate column-wise
+            total_real_agreement += real_agreement
+            total_possible_agreement += possible_agreement
+
+        # Avoid division by zero if possible_agreement == 0
+        if total_possible_agreement == 0:
+            return 0.0
+
+        return total_real_agreement / total_possible_agreement
+    except Exception as e:
+        print(e)
         return 0.0
-
-    df1 = df1.copy()  # Precaution
-    df2 = df2.copy()
-
-    def _ensure_hashable_values(value: Any) -> Hashable:
-        if isinstance(value, Hashable):
-            return value
-        return repr(value)
-
-    # Use applymap for DataFrames
-    df1 = df1.applymap(_ensure_hashable_values)
-    df2 = df2.applymap(_ensure_hashable_values)
-
-    # For rare cases where df has two columns with the same name (sic!)
-    def _select_1d(df, col):
-        c = df[col]
-        if len(c.shape) == 2:
-            return pd.DataFrame(c.stack().values)
-        return c
-
-    # Precompute value_counts for each column
-    df1_counts = {col: _select_1d(df1, col).value_counts(dropna=False) for col in df1.columns}
-    df2_counts = {col: _select_1d(df2, col).value_counts(dropna=False) for col in df2.columns}
-
-    total_real_agreement = 0.0
-    total_possible_agreement = 0.0
-
-    # Union of all columns
-    all_columns = df1.columns.union(df2.columns)
-
-    for col in all_columns:
-        vc1 = df1_counts.get(col)
-        vc2 = df2_counts.get(col)
-
-        if vc1 is None or vc1.empty:
-            total_possible_agreement += vc2.to_numpy().sum()
-            continue
-
-        if vc2 is None or vc2.empty:
-            total_possible_agreement += vc1.to_numpy().sum()
-            continue
-
-        # 1) Get union of distinct values in that column
-        union_idx = pd.Index(pd.concat([vc1.index.to_frame(), vc2.index.to_frame()], axis=0).iloc[:, 0].unique())
-        if union_idx.dtype != "object":
-            union_idx = union_idx.astype(object)
-
-        # 2) Reindex both frequency series to that union, fill missing with 0
-        freq1 = vc1.reindex(union_idx, fill_value=0).values
-        freq2 = vc2.reindex(union_idx, fill_value=0).values
-
-        if np.nan in union_idx:
-            freq1[union_idx.isnull()] += freq2[union_idx.isnull()]
-            freq2[union_idx.isnull()] = 0
-
-        # 3) Vectorized computations (avoiding DataFrame overhead)
-        possible_agreement = np.maximum(freq1, freq2).sum()
-        accumulated_difference = np.abs(freq1 - freq2).sum()
-        real_agreement = possible_agreement - accumulated_difference
-
-        # Accumulate column-wise
-        total_real_agreement += real_agreement
-        total_possible_agreement += possible_agreement
-
-    # Avoid division by zero if possible_agreement == 0
-    if total_possible_agreement == 0:
-        return 0.0
-
-    return total_real_agreement / total_possible_agreement
 
 
 def calculate_similarity_matrix(

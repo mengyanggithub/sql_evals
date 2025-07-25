@@ -214,7 +214,7 @@ def major_voting(db_files, pred_sqls, sampling_num, return_random_one_when_all_e
     mj_pred_sqls = []
     execution_results = []
     # execute all sampled SQL queries to obtain their execution results
-    execute_sqls_parallel(db_files, pred_sqls, num_cpus=20, timeout=10)
+    execute_sqls_parallel(db_files, pred_sqls, num_cpus=20, timeout=60)
     execution_results = sorted(execution_results, key=lambda x: x["data_idx"])
     if DO_PRINT:
         print("len(execution_results):", len(execution_results))
